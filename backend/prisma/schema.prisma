@@ -1,0 +1,218 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  USER
+  PHARMACIST
+  ADMIN
+}
+
+enum PrescriptionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum OrderStatus {
+  PENDING_PRESCRIPTION // Awaiting pharmacist review of prescription
+  PENDING_PAYMENT      // Awaiting payment completion
+  PROCESSING           // Being packed/processed
+  SHIPPED              // Out for delivery
+  DELIVERED            // Successfully delivered
+  CANCELLED            // Cancelled by user or admin
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  REFUNDED
+}
+
+enum TicketStatus {
+  OPEN
+  RESOLVED
+  CLOSED
+}
+
+model User {
+  id               String            @id @default(uuid())
+  email            String            @unique
+  phone            String?           @unique
+  name             String
+  passwordHash     String
+  role             Role              @default(USER)
+  isVerified       Boolean           @default(false)
+  googleId         String?
+  twoFactorSecret  String?
+  is2FAEnabled     Boolean           @default(false)
+  status           String            @default("ACTIVE") // ACTIVE, SUSPENDED
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  addresses        Address[]
+  prescriptions    Prescription[]
+  orders           Order[]
+  reminders        MedicineReminder[]
+  subscriptions    Subscription[]
+  supportTickets   SupportTicket[]
+  auditLogs        AuditLog[]
+  loginHistories   LoginHistory[]
+}
+
+model Address {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  label      String   // Home, Work, etc.
+  street     String
+  city       String
+  state      String
+  zipCode    String
+  isDefault  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  orders     Order[]
+}
+
+model Product {
+  id                   String      @id @default(uuid())
+  name                 String
+  brand                String
+  genericName          String?
+  manufacturer         String?
+  composition          String?
+  uses                 String?
+  benefits             String?
+  dosage               String?
+  sideEffects          String?
+  warnings             String?
+  drugInteractions     String?
+  storageInfo          String?
+  prescriptionRequired Boolean     @default(false)
+  price                Float
+  discount             Float       @default(0) // Percentage discount (e.g. 15 for 15%)
+  rating               Float       @default(0)
+  ratingCount          Int         @default(0)
+  stockCount           Int         @default(100)
+  stockStatus          String      @default("IN_STOCK") // IN_STOCK, OUT_OF_STOCK, LOW_STOCK
+  image                String
+  category             String      // Prescription Medicines, OTC, Personal Care, Diabetes, Heart Care, Baby Care, etc.
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
+  orderItems           OrderItem[]
+}
+
+model Prescription {
+  id         String             @id @default(uuid())
+  userId     String
+  user       User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fileUrl    String             // URL to PDF or image
+  status     PrescriptionStatus @default(PENDING)
+  notes      String?            // Feedback from pharmacist
+  verifiedBy String?            // Name or ID of pharmacist
+  verifiedAt DateTime?
+  createdAt  DateTime           @default(now())
+  updatedAt  DateTime           @updatedAt
+  orders     Order[]
+}
+
+model Order {
+  id               String         @id @default(uuid())
+  userId           String
+  user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  addressId        String
+  address          Address        @relation(fields: [addressId], references: [id])
+  prescriptionId   String?
+  prescription     Prescription?  @relation(fields: [prescriptionId], references: [id])
+  status           OrderStatus    @default(PROCESSING)
+  totalAmount      Float
+  discountAmount   Float          @default(0)
+  taxAmount        Float          @default(0)
+  shippingAmount   Float          @default(0)
+  paymentMethod    String         // COD, STRIPE, RAZORPAY, PAYPAL
+  paymentId        String?        // Transaction reference
+  paymentStatus    PaymentStatus  @default(PENDING)
+  deliverySlot     String?        // Slot selection (e.g. "Tomorrow, 9 AM - 1 PM")
+  invoiceUrl       String?
+  deliveryPartner  String?
+  trackingId       String?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  items            OrderItem[]
+}
+
+model OrderItem {
+  id         String   @id @default(uuid())
+  orderId    String
+  order      Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId  String
+  product    Product  @relation(fields: [productId], references: [id])
+  quantity   Int
+  price      Float    // Price at time of order
+  discount   Float    @default(0)
+  createdAt  DateTime @default(now())
+}
+
+model MedicineReminder {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  medicineName String
+  dosage       String   // e.g. "1 Tablet", "5ml"
+  frequency    String   // Daily, Weekly, Custom
+  timeOfDay    String   // e.g. "08:00, 20:00"
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Subscription {
+  id                 String   @id @default(uuid())
+  userId             String
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productIds         String   // JSON-serialized list of product IDs or product names
+  frequencyInDays    Int      @default(30)
+  nextBillingDate    DateTime
+  status             String   @default("ACTIVE") // ACTIVE, CANCELLED
+  discountPercentage Float    @default(10)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model SupportTicket {
+  id          String       @id @default(uuid())
+  userId      String
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subject     String
+  description String
+  category    String       // Support, Delivery, Payment, Medicine Quality
+  status      TicketStatus @default(OPEN)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+model LoginHistory {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ipAddress String
+  device    String
+  location  String?
+  timestamp DateTime @default(now())
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action    String   // e.g. "LOGIN", "PRESCRIPTION_UPLOAD", "ORDER_PLACED"
+  details   String
+  ipAddress String
+  createdAt DateTime @default(now())
+}
