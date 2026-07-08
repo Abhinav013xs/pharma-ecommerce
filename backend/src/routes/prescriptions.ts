@@ -9,10 +9,14 @@ import { authenticateToken, authorizeRoles, AuthenticatedRequest } from '../midd
 
 const router = Router();
 
-// Ensure local uploads directory exists
-const UPLOADS_DIR = './uploads';
+// Ensure local uploads directory exists (use writable /tmp/uploads in serverless environments)
+const UPLOADS_DIR = process.env.NETLIFY ? '/tmp/uploads' : './uploads';
 if (!fs.existsSync(UPLOADS_DIR)) {
-  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+  try {
+    fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+  } catch (e) {
+    console.warn("Warning: Could not create uploads directory:", e);
+  }
 }
 
 // Multer Disk Storage Configuration

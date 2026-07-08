@@ -45,8 +45,9 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Serve local upload uploads directory statically
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+// Serve local upload uploads directory statically (pointing to /tmp/uploads in serverless mode)
+const uploadsStaticPath = process.env.NETLIFY ? '/tmp/uploads' : path.join(__dirname, '../uploads');
+app.use('/uploads', express.static(uploadsStaticPath));
 
 // Mount API routers
 app.use('/api/auth', authRouter);
