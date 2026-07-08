@@ -7,9 +7,19 @@ import dotenv from 'dotenv';
 // Load environment variables
 dotenv.config();
 
-// Resolve __dirname since we are using ES Modules (type: module)
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+// Resolve directory path safely for both ES Modules (local dev) and CommonJS (Netlify bundle)
+let projectDirname = '';
+try {
+  if (typeof import.meta !== 'undefined' && import.meta.url) {
+    const __filename = fileURLToPath(import.meta.url);
+    projectDirname = path.dirname(__filename);
+  } else {
+    // @ts-ignore
+    projectDirname = typeof __dirname !== 'undefined' ? __dirname : process.cwd();
+  }
+} catch (e) {
+  projectDirname = process.cwd();
+}
 
 // Import Routers
 import authRouter from './routes/auth.js';
@@ -46,7 +56,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Serve local upload uploads directory statically (pointing to /tmp/uploads in serverless mode)
-const uploadsStaticPath = process.env.NETLIFY ? '/tmp/uploads' : path.join(__dirname, '../uploads');
+const uploadsStaticPath = process.env.NETLIFY ? '/tmp/uploads' : path.join(projectDirname, '../uploads');
 app.use('/uploads', express.static(uploadsStaticPath));
 
 // Mount API routers
